@@ -27,13 +27,13 @@ namespace CgmStatusBar.Models
                     case "flat":
                         return "→";
                     case "fortyfiveup":
-                        return "↗";
+                        return "➚";
                     case "singleup":
                         return "↑";
                     case "doubleup":
                         return "↑↑";
                     case "fortyfivedown":
-                        return "↘";
+                        return "➘";
                     case "singledown":
                         return "↓";
                     case "doubledown":

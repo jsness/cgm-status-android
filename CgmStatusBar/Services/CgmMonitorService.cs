@@ -117,6 +117,7 @@ namespace CgmStatusBar.Services
                     .Width(Width)
                     .Height(Height)
                     .FontSize(FontSize)
+                    .TextColor(Android.Graphics.Color.Black)
                     .EndConfig()
                     .BuildRect(directionArrow, firstEntry.GetColor(_settings))
                     .ToBitmap()
