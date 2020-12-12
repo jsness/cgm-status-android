@@ -6,26 +6,19 @@ using Android.Support.Design.Widget;
 using Android.Support.V7.App;
 using Android.Views;
 using Android.Widget;
-using CgmStatusBar.Extensions;
 using CgmStatusBar.Interfaces;
 using CgmStatusBar.Models;
 using CgmStatusBar.Services;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
-using XamarinTextDrawable;
 
 namespace CgmStatusBar
 {
     [Activity(Label = "@string/app_name", Theme = "@style/AppTheme", MainLauncher = true)]
     public class MainActivity : AppCompatActivity, BottomNavigationView.IOnNavigationItemSelectedListener, ICgmDataCallback
     {
-        private string ChannelId = "NCN9R8YESFIUHH";
         private const string SettingsFile = "CgmStatusBar\\SettingData.txt";
-
-        private const int FontSize = 60;
-        private const int Width = 60;
-        private const int Height = 60;
 
         TextView mainTextView;
         TextView glucoseTextView;
@@ -45,15 +38,13 @@ namespace CgmStatusBar
             BottomNavigationView navigation = FindViewById<BottomNavigationView>(Resource.Id.navigation);
             navigation.SetOnNavigationItemSelectedListener(this);
 
-            CreateNotificationChannel();
-
             mainLinearLayout = FindViewById<LinearLayout>(Resource.Id.mainLinearLayout);
 
             var settingsJson = LoadSettings();
-            settings = CgmSettingsViewFactory.GetDefaultSettingsViews(this, SaveSettings, LoadSettings());
+            settings = CgmSettingsViewFactory.GetDefaultSettingsViews(this, SaveSettings, JsonSerializer.Deserialize<CgmSettings>(settingsJson));
 
             var cgmMontorIntent = new Intent(this, typeof(CgmMonitorService));
-            cgmMontorIntent.PutExtra("cgmUrl", settings.values.CgmMonitorUrl);
+            cgmMontorIntent.PutExtra("settingsJson", settingsJson);
             StartService(cgmMontorIntent);
 
             cgmDataReceiver = new CgmDataReceiver();
@@ -65,21 +56,19 @@ namespace CgmStatusBar
             var json = JsonSerializer.Serialize(settings);
             System.IO.File.WriteAllText(file, json);
 
-            Xamarin.Forms.MessagingCenter.Send(settings.CgmMonitorUrl, settings.GetType().FullName);
+            Xamarin.Forms.MessagingCenter.Send(settings, settings.GetType().FullName);
         }
 
-        public CgmSettings LoadSettings()
+        public string LoadSettings()
         {
             var file = System.IO.Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.Personal), SettingsFile);
 
             if (!System.IO.File.Exists(file))
             {
-                return new CgmSettings();
+                return string.Empty;
             }
 
-            var json = System.IO.File.ReadAllText(file);
-
-            return JsonSerializer.Deserialize<CgmSettings>(json);
+            return System.IO.File.ReadAllText(file);
         }
 
         public override void OnRequestPermissionsResult(int requestCode, string[] permissions, [GeneratedEnum] Android.Content.PM.Permission[] grantResults)
@@ -143,47 +132,11 @@ namespace CgmStatusBar
                 var text = $"{firstEntry.Glucose}{directionArrow}";
 
                 glucoseTextView.SetText(text, TextView.BufferType.Normal);
-
-                var icon = new TextDrawable.Builder()
-                    .BeginConfig()
-                    .Width(Width)
-                    .Height(Height)
-                    .FontSize(FontSize)
-                    .EndConfig()
-                    .BuildRect(directionArrow, firstEntry.GetColor(settings.values))
-                    .ToBitmap()
-                    .CreateIcon();
-
-                var builder = new Notification.Builder(this, ChannelId)
-                    .SetSmallIcon(icon)
-                    .SetLargeIcon(icon)
-                    .SetContentText(text);
-
-                var notificationManager = (NotificationManager)GetSystemService(NotificationService);
-                notificationManager.Notify(0, builder.Build());
             }
             else
             {
                 glucoseTextView.SetText(Resource.String.no_glucose_reading);
             }
-        }
-
-        private void CreateNotificationChannel()
-        {
-            if (Build.VERSION.SdkInt < BuildVersionCodes.O)
-            {
-                return;
-            }
-
-            var channelName = Resources.GetString(Resource.String.channel_name);
-            var channelDescription = GetString(Resource.String.channel_description);
-            var channel = new NotificationChannel(ChannelId, channelName, NotificationImportance.Default)
-            {
-                Description = channelDescription
-            };
-
-            var notificationManager = (NotificationManager)GetSystemService(NotificationService);
-            notificationManager.CreateNotificationChannel(channel);
         }
     }
 }

@@ -3,10 +3,15 @@ using Android.Content;
 using Android.OS;
 using Android.Runtime;
 using Android.Util;
+using CgmStatusBar.Extensions;
 using CgmStatusBar.Models;
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Net.Http;
+using System.Text.Json;
 using Xamarin.Forms;
+using XamarinTextDrawable;
 
 namespace CgmStatusBar.Services
 {
@@ -16,9 +21,15 @@ namespace CgmStatusBar.Services
         private readonly string _tag = typeof(CgmMonitorService).FullName;
         private Handler _handler;
         private Action _action;
-        private string _cgmUrl;
+        private CgmSettings _settings = new CgmSettings();
+
+        private const int FontSize = 60;
+        private const int Width = 60;
+        private const int Height = 60;
+        private const int MinutesToCheck = 1;
         private const string CgmEntriesEndpoint = "/api/v1/entries.json";
-        
+        private string ChannelId = "NCN9R8YESFIUHH";
+
         private static readonly HttpClient _httpClient = new HttpClient();
 
         public override IBinder OnBind(Intent intent)
@@ -31,16 +42,20 @@ namespace CgmStatusBar.Services
         {
             Log.Debug(_tag, "Creating service");
 
-            MessagingCenter.Subscribe<string>(this, typeof(CgmSettings).FullName, (sender) =>
+            CreateNotificationChannel();
+
+            MessagingCenter.Subscribe<CgmSettings>(this, typeof(CgmSettings).FullName, (sender) =>
             {
-                _cgmUrl = sender;
+                _settings = sender;
             });
 
             _handler = new Handler();
 
             _action = new Action(() =>
             {
-                if (!string.IsNullOrWhiteSpace(_cgmUrl) && Uri.TryCreate($"{_cgmUrl}{CgmEntriesEndpoint}", UriKind.Absolute, out var cgmUri) && cgmUri.Scheme == Uri.UriSchemeHttps)
+                if (!string.IsNullOrWhiteSpace(_settings.CgmMonitorUrl)
+                    && Uri.TryCreate($"{_settings.CgmMonitorUrl}{CgmEntriesEndpoint}", UriKind.Absolute, out var cgmUri)
+                    && cgmUri.Scheme == Uri.UriSchemeHttps)
                 {
                     Log.Debug(_tag, "Getting CGM data...");
 
@@ -51,6 +66,7 @@ namespace CgmStatusBar.Services
                         var readTask = result.Result.Content.ReadAsStringAsync();
                         readTask.ContinueWith(readResult =>
                         {
+                            HandleResult(readResult.Result);
                             var message = new Intent(typeof(CgmDataReceiver).FullName);
                             message.PutExtra("cgmJsonData", readResult.Result);
                             SendBroadcast(message);
@@ -58,7 +74,7 @@ namespace CgmStatusBar.Services
                     });
                 }
 
-                _handler.PostDelayed(_action, (long)TimeSpan.FromSeconds(3).TotalMilliseconds);
+                _handler.PostDelayed(_action, (long)TimeSpan.FromMinutes(MinutesToCheck).TotalMilliseconds);
             });
 
             base.OnCreate();
@@ -69,9 +85,10 @@ namespace CgmStatusBar.Services
         {
             Log.Debug(_tag, "Starting service");
 
-            _cgmUrl = intent.GetStringExtra("cgmUrl");
+            var settingsJson = intent.GetStringExtra("settingsJson");
+            _settings = JsonSerializer.Deserialize<CgmSettings>(settingsJson);
 
-            _handler.PostDelayed(_action, (long)TimeSpan.FromSeconds(3).TotalMilliseconds);
+            _handler.Post(_action);
 
             return StartCommandResult.Sticky;
         }
@@ -83,6 +100,54 @@ namespace CgmStatusBar.Services
             _handler.RemoveCallbacks(_action);
 
             base.OnDestroy();
+        }
+
+        private void HandleResult(string result)
+        {
+            var entries = JsonSerializer.Deserialize<IEnumerable<CgmEntry>>(result);
+
+            if (entries.Any())
+            {
+                var firstEntry = entries.First();
+                var directionArrow = firstEntry.DirectionArrow;
+                var text = $"{firstEntry.Glucose}{directionArrow}";
+
+                var icon = new TextDrawable.Builder()
+                    .BeginConfig()
+                    .Width(Width)
+                    .Height(Height)
+                    .FontSize(FontSize)
+                    .EndConfig()
+                    .BuildRect(directionArrow, firstEntry.GetColor(_settings))
+                    .ToBitmap()
+                    .CreateIcon();
+
+                var builder = new Notification.Builder(this, ChannelId)
+                    .SetSmallIcon(icon)
+                    .SetLargeIcon(icon)
+                    .SetContentText(text);
+
+                var notificationManager = (NotificationManager)GetSystemService(NotificationService);
+                notificationManager.Notify(0, builder.Build());
+            }
+        }
+
+        private void CreateNotificationChannel()
+        {
+            if (Build.VERSION.SdkInt < BuildVersionCodes.O)
+            {
+                return;
+            }
+
+            var channelName = Resources.GetString(Resource.String.channel_name);
+            var channelDescription = GetString(Resource.String.channel_description);
+            var channel = new NotificationChannel(ChannelId, channelName, NotificationImportance.Default)
+            {
+                Description = channelDescription
+            };
+
+            var notificationManager = (NotificationManager)GetSystemService(NotificationService);
+            notificationManager.CreateNotificationChannel(channel);
         }
     }
 }
