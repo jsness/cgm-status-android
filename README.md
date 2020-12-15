@@ -1,5 +1,7 @@
 # cgm-status-android
 
+[![Build Status](https://dev.azure.com/jnessdev/jnessdev/_apis/build/status/jsness.cgm-status-android?branchName=main)](https://dev.azure.com/jnessdev/jnessdev/_build/latest?definitionId=1&branchName=main)
+
 **cgm-status-android** is an Android app that pulls CGM data from [nightscout/cgm-remote-monitor](https://github.com/nightscout/cgm-remote-monitor) and displays the most recent Blood Glucose value in a notification along with the trend arrow and color in the status bar icon. The Dexcom Follow app does not provide a way to monitor via notifications, you must open their app manually to see the current value. This will allow you to monitor without unlocking your phone.
 
 - Add the Url to your deployment of [nightscout/cgm-remote-monitor](https://github.com/nightscout/cgm-remote-monitor)
